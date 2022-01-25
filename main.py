@@ -2,12 +2,31 @@ from random import shuffle
 from numpy import base_repr, binary_repr
 
 
-def FileHandle(Path):
-    CharCodes = list()
+def FileHandle(Path, BlockSize):
+    CharCodeD = list()
     with open(Path, 'rb') as File:
         for Row in File.readlines():
-            CharCodes.append(list(Row))
-    return CharCodes
+            CharCodeD.append(list(Row))
+    print(CharCodeD)
+    CharCodeB = DecimalToBin(CharCodeD, 0)
+    print(CharCodeB)
+    CharCodeBRow = list()
+    for Row in CharCodeB:
+        CharCodeBRow.append(''.join(Row))
+    print(CharCodeBRow)
+    Blocks = list()
+    for Row in CharCodeBRow:
+        Block = list()
+        if len(Row) % BlockSize == 0:
+            for i in range(0, len(Row), BlockSize):
+                Block.append(Row[i:i + BlockSize])
+        else:
+            PaddingNum = ((len(Row) // BlockSize) + 1) * BlockSize
+            Row = Row.zfill(PaddingNum)
+            for i in range(0, len(Row), BlockSize):
+                Block.append(Row[i:i + BlockSize])
+        Blocks.append(Block)
+    return Blocks
 
 
 def DecimalToBaseM(M, Rows, Len):
@@ -71,6 +90,83 @@ def DecimalToBin(Rows, Len):
     return CharsB
 
 
+def PossibleCoef(Num, Coefs):
+    Coef6, Coef7 = 0, 0
+    for i in range(1 + Coefs[-1][0], Num):
+        if (Num - (i * 6)) % 7 == 0:
+            Coef6 = i
+            break
+    Coef7 = (Num - (Coef6 * 6)) // 7
+    if Coef7 > 0 and Coef6 > 0:
+        Coefs.append([Coef6, Coef7])
+        PossibleCoef(Num, Coefs)
+    else:
+        Coefs.append([-1, -1])
+        return Coefs
+    return Coefs
+
+
+def wtf(Row, Coefs):
+    C7, C6 = 0, 0
+    Temp = list()
+    i = 0
+    while i < len(Row):
+        if i + 7 < len(Row) and Row[i + 7] != '0':
+            Temp.append(Row[i:i + 7])
+            i += 7
+            C7 += 1
+        elif i + 6 < len(Row) and Row[i + 6] != '0':
+            Temp.append(Row[i:i + 6])
+            i += 6
+            C6 += 1
+        else:
+            break
+    Temp1 = list()
+    Temp2 = list()
+    for Coef in Coefs:
+        if Coef == [C6, C7]:
+            Temp1.append(Coef)
+            break
+        elif Coef[0] >= C6:
+            Temp2.append(Coef)
+    if Temp1:
+        CF = Temp1[0]
+    elif Temp2:
+        CF = Temp2[0]
+    Temp3 = list()
+    i = 0
+    while i < len(Row):
+        if i + 7 < len(Row) and Row[i + 7] != '0' and CF[1] != 0:
+            Temp3.append(Row[i:i + 7])
+            i += 7
+            CF[1] -= 1
+        elif i + 6 < len(Row) and Row[i + 6] != '0' and CF[0] != 00:
+            Temp3.append(Row[i:i + 6])
+            i += 6
+            CF[0] -= 1
+        elif i != len(Row) - 1:
+            if len(Row) - i == 6 and CF[0] == 1:
+                Temp3.append(Row[i:])
+                i += 6
+            elif len(Row) - i == 7 and CF[1] == 1:
+                Temp3.append(Row[i:])
+                i += 7
+            else:
+                BackLen = len(Temp3.pop())
+                i -= BackLen
+                while BackLen == 6:
+                    BackLen = len(Temp3.pop())
+                    i -= BackLen
+                    CF[0] += 1
+                CF[1] += 1
+                Temp3.append(Row[i:i + 6])
+                i += 6
+                CF[0] -= 1
+        else:
+            break
+    return Temp3
+
+
 def Menu():
     print('[1] Key Generation.')
     print('[2] Encryption.')
@@ -81,14 +177,15 @@ def Menu():
 
 
 def GenerateKey():
-    M = int(input('Enter your desired base number for M: '))
-    KeyPath = input('Enter location to save key file: ')
-    # M = 5
-    # KeyPath = r'C:\Users\User\Desktop'
+    # M = int(input('Enter your desired base number for M: '))
+    # BlockSize = int(input('Enter your desired block size: '))
+    # KeyPath = input('Enter location to save key file: ') + '\Key.txt'
+    M = 5
+    BlockSize = 13
+    KeyPath = r'C:\Users\User\Desktop\Key.txt'
     MapDict = CreateMap(M)
-    BlockSize = 8
-    with open(KeyPath + '\Key.txt', 'w') as KeyFile:
-        KeyFile.write('M: ' + str(M) + '\n')
+    with open(KeyPath, 'w') as KeyFile:
+        KeyFile.write('Base (M): ' + str(M) + '\n')
         KeyFile.write('Original block size: ' + str(BlockSize) + '\n')
         KeyFile.write('Map function:' + '\n')
         for i in MapDict:
@@ -97,43 +194,45 @@ def GenerateKey():
 
 def ExtractInfo(KeyPath):
     with open(KeyPath, 'r') as KeyFile:
-        KeyFile.read(3)
-        M = int(KeyFile.read(1))
-        KeyFile.read(22)
-        BlockSize = KeyFile.read(1)
-        KeyFile.read(15)
-        MapDict = dict()
-        for i in range(M):
-            Key = KeyFile.read(1)
-            KeyFile.read(4)
-            Val = KeyFile.read(1)
-            KeyFile.read(1)
-            MapDict[Key] = Val
-    return M, BlockSize, MapDict
+        Info = list()
+        for Row in KeyFile.readlines():
+            Row = Row.split(' ')
+            Info.append(Row)
+    M = int(Info[0][-1])
+    BlockSize = int(Info[1][-1])
+    MapTable = dict()
+    for Row in Info[3:]:
+        MapTable[Row[0]] = Row[-1][0]
+    return M, BlockSize, MapTable
 
 
 def Encrypt():
-    KeyPath = input('Enter key location: ')
-    OriginalPath = input('Enter original file location: ')
-    EncryptedPath = input('Enter location to save encrypted file: ')
-    # KeyPath = r'C:\Users\User\Desktop\Key.txt'
-    # OriginalPath = r'C:\Users\User\Desktop\1.txt'
-    # EncryptedPath = r'C:\Users\User\Desktop'
+    # KeyPath = input('Enter key location: ')
+    # OriginalPath = input('Enter original file location: ')
+    # EncryptedPath = input('Enter location to save encrypted file: ')
+    KeyPath = r'C:\Users\User\Desktop\Key.txt'
+    OriginalPath = r'C:\Users\User\Desktop\1.txt'
+    EncryptedPath = r'C:\Users\User\Desktop'
     M, BlockSize, MapDict = ExtractInfo(KeyPath)
-    FileChar = FileHandle(OriginalPath)
-    ReqLenBaseM = len(base_repr(2 ** int(BlockSize) - 1, M))
+    FileCharB = FileHandle(OriginalPath, BlockSize)
+    print(FileCharB)
+    ReqLenBaseM = len(base_repr(2 ** BlockSize - 1, M))
     FileCharM = list()
-    for Chars in FileChar:
+    for Chars in FileCharB:
         Temp = list()
         for Char in Chars:
-            Temp.append(base_repr(int(Char), M).zfill(ReqLenBaseM))
+            Temp.append(base_repr(int(Char, 2), M).zfill(ReqLenBaseM))
         FileCharM.append(Temp)
+    print(FileCharM)
     MaxM = DecMaxBaseM(M, ReqLenBaseM)
     MaxBaseMDecimal = int(MaxM, M)
     ReqLenB = len(binary_repr(MaxBaseMDecimal))
     MappedCharM = MapFunc(MapDict, FileCharM)
+    print(MappedCharM)
     MappedCharD = BaseMToDecimal(M, MappedCharM)
+    print(MappedCharD)
     MappedCharB = DecimalToBin(MappedCharD, ReqLenB)
+    print(MappedCharB)
     with open(EncryptedPath + '\Encrypted.txt', 'w') as EncryptedFile:
         for Row in MappedCharB:
             for Num in Row:
@@ -142,19 +241,19 @@ def Encrypt():
 
 
 def Decrypt():
-    KeyPath = input('Enter key location: ')
-    EncryptedPath = input('Enter encrypted file location: ')
-    DecryptedPath = input('Enter location to save decrypted file: ')
-    # KeyPath = r'C:\Users\User\Desktop\Key.txt'
-    # EncryptedPath = r'C:\Users\User\Desktop\Encrypted.txt'
-    # DecryptedPath = r'C:\Users\User\Desktop'
+    # KeyPath = input('Enter key location: ')
+    # EncryptedPath = input('Enter encrypted file location: ')
+    # DecryptedPath = input('Enter location to save decrypted file: ')
+    KeyPath = r'C:\Users\User\Desktop\Key.txt'
+    EncryptedPath = r'C:\Users\User\Desktop\Encrypted.txt'
+    DecryptedPath = r'C:\Users\User\Desktop' + '\Decrypted.txt'
     M, BlockSize, MapDict = ExtractInfo(KeyPath)
     with open(EncryptedPath, 'r') as EncryptedFile:
         FileCharB = list()
-        for Row in EncryptedFile.readlines():
-            Row = Row[:-2]
-            Row = Row.split(' ')
-            FileCharB.append(Row)
+        for MappedCharBRow in EncryptedFile.readlines():
+            MappedCharBRow = MappedCharBRow[:-2]
+            MappedCharBRow = MappedCharBRow.split(' ')
+            FileCharB.append(MappedCharBRow)
     EncCharD = list()
     for Chars in FileCharB:
         Temp = list()
@@ -162,23 +261,50 @@ def Decrypt():
             Num = str(int(Char, 2))
             Temp.append(Num)
         EncCharD.append(Temp)
-    ReqLenM = len(base_repr(255, M))
-    EncCharM = list()
-    for Chars in EncCharD:
-        Temp = list()
-        for Char in Chars:
-            Temp.append(base_repr(int(Char), M).zfill(ReqLenM))
-        EncCharM.append(Temp)
+    ReqLenM = len(base_repr(2 ** BlockSize - 1, M))
+    EncCharM = DecimalToBaseM(M, EncCharD, ReqLenM)
     MapDictReverse = dict(map(reversed, MapDict.items()))
     MapDictReverseItems = MapDictReverse.items()
     SortedMapDictReverse = dict(sorted(MapDictReverseItems))
     MappedCharM = MapFunc(SortedMapDictReverse, EncCharM)
     MappedCharD = BaseMToDecimal(M, MappedCharM)
-    with open(DecryptedPath + '\Decrypted.txt', 'w') as DecryptedFile:
-        for Chars in MappedCharD:
-            for Char in Chars[:-1]:
-                DecryptedFile.write(chr(int(Char)))
-            DecryptedFile.write('')
+    MappedCharB = DecimalToBin(MappedCharD, BlockSize)
+    MappedCharBRow = list()
+    for Chars in MappedCharB:
+        MappedCharBRow.append(''.join(Chars))
+    OriginalRow = list()
+    for Row in MappedCharBRow:
+        for i, Num in enumerate(Row):
+            if Num == '1':
+                Start = i
+                break
+        Row = Row[Start:-8]
+        OriginalRow.append(Row)
+    OriginalChar = list()
+    for Row in OriginalRow:
+        Temp = list()
+        if len(Row) % 42 == 0:
+            C = (len(Row) // 42) * 2
+            Coef = [C, C]
+            x = wtf(Row, Coef)
+            OriginalChar.append(x)
+        elif len(Row) % 7 == 0:
+            for i in range(0, len(Row), 7):
+                Temp.append(Row[i:i + 7])
+            OriginalChar.append(Temp)
+        elif len(Row) % 6 == 0:
+            for i in range(0, len(Row), 6):
+                Temp.append(Row[i:i + 6])
+            OriginalChar.append(Temp)
+        else:
+            Coefs = PossibleCoef(len(Row), [[-1, -1]])[1:-1]
+            x = wtf(Row, Coefs)
+            OriginalChar.append(x)
+    with open(DecryptedPath, 'w') as DecryptedFile:
+        for Row in OriginalChar:
+            for Char in Row:
+                DecryptedFile.write(chr(int(Char, 2)))
+            DecryptedFile.write('\n')
 
 
 def DiscoverKey():
@@ -186,6 +312,8 @@ def DiscoverKey():
 
 
 if __name__ == '__main__':
+    # print(wtf('100110111011111101001'))
+    # print(PossibleCoef(158, [[-1, -1]])[1:-1])
     print('Welcome.')
     print('Please select your desired action from the list below.' + '\n')
     Menu()
